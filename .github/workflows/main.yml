@@ -44,3 +44,11 @@ jobs:
         run: |
           test -f upload_sln_to_supabase.py
           python -u upload_sln_to_supabase.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug
+          path: debug/
+
