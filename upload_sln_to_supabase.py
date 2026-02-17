@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 from supabase import create_client
 
 # =========================
-# Helpers env
+# ENV helpers
 # =========================
 def require_env(name: str) -> str:
     v = os.getenv(name)
@@ -37,7 +37,7 @@ COL_FECHA = "Fecha Programación de servicio"
 # SUPABASE CONFIG
 # =========================
 SUPABASE_URL = require_env("SUPABASE_URL")
-SUPABASE_KEY = require_env("SUPABASE_SECRET")
+SUPABASE_KEY = require_env("SUPABASE_SECRET")  # service role/secret
 SUPABASE_TABLE = "programacion_transporte"
 
 # ---------------- Helpers ----------------
@@ -69,7 +69,6 @@ def select_tipo_fecha_with_scroll(page, option_text: str, max_scrolls: int = 60)
         if opt.count() > 0 and opt.first.is_visible():
             opt.first.click()
             return
-
         listbox.hover()
         page.mouse.wheel(0, 400)
         page.wait_for_timeout(100)
@@ -94,7 +93,6 @@ def download_csv_from_sln(download_dir: Path) -> Path:
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"],
         )
-
         context = browser.new_context(
             http_credentials={"username": SLN_HTTP_USER, "password": SLN_HTTP_PASS},
             ignore_https_errors=True,
@@ -110,7 +108,6 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         page.wait_for_load_state("networkidle", timeout=60_000)
 
         print("[BOT] Navegando a Programación de Transporte...")
-
         page.wait_for_load_state("networkidle", timeout=60_000)
         debug_dump(page, "antes_click_operaciones")
 
@@ -118,7 +115,7 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         page.get_by_text("Programación de Transporte", exact=False).first.click(timeout=60_000)
         page.get_by_text("Programación de Transporte", exact=False).first.wait_for(timeout=60_000)
 
-        # ✅ HOY EN CHILE
+        # ✅ HOY EN CHILE (solo para filtro en SLN)
         hoy_cl = datetime.now(TZ_CL)
         fecha_hoy_digits = hoy_cl.strftime("%d%m%Y")
         print(f"[BOT] Fecha Chile usada: {hoy_cl.strftime('%Y-%m-%d %H:%M:%S')} ({fecha_hoy_digits})")
@@ -176,12 +173,11 @@ def upload_to_supabase(csv_path: Path):
     df = pd.read_csv(csv_path, sep=";", encoding="utf-8-sig")
     print(f"[CSV] Filas CSV: {len(df)}")
 
-    # Validaciones
     for col in (COL_OS, COL_FECHA):
         if col not in df.columns:
             raise RuntimeError(f"Falta columna '{col}'. Columnas: {list(df.columns)}")
 
-    # Parse fecha
+    # Parse fecha SLN
     df[COL_FECHA] = pd.to_datetime(df[COL_FECHA], errors="coerce", dayfirst=True)
 
     df2 = df[[COL_OS, COL_FECHA]].dropna().copy()
@@ -191,10 +187,14 @@ def upload_to_supabase(csv_path: Path):
     if df2.empty:
         raise RuntimeError("CSV sin filas válidas (OS/Fecha).")
 
-    # timestamp WITHOUT time zone -> string sin offset
+    # ✅ Detectar el día REAL de la data (este es el que debes borrar)
+    day_csv = df2[COL_FECHA].dt.date.mode().iloc[0]
+    print(f"[SUPABASE] Día detectado desde CSV: {day_csv}")
+
+    # Para timestamp WITHOUT time zone, subimos string sin offset
     df2["fecha_programacion_str"] = df2[COL_FECHA].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # updated_at en hora Chile (visual)
+    # updated_at en hora Chile (visual consistente)
     updated_at = datetime.now(TZ_CL).strftime("%Y-%m-%d %H:%M:%S")
 
     rows = [
@@ -208,15 +208,22 @@ def upload_to_supabase(csv_path: Path):
 
     print(f"[SUPABASE] Filas listas para insertar: {len(rows)}")
 
-    # ==================================================
-    # ✅ Opción A (Paso 2): BORRADO POR DÍA EXACTO (RPC)
-    # ==================================================
-    today_cl = datetime.now(TZ_CL).date()
-    print(f"[SUPABASE] Borrando por día exacto vía RPC: {today_cl} ...")
-
-    rpc_res = supabase.rpc("delete_programacion_by_day", {"p_day": str(today_cl)}).execute()
+    # ✅ RPC delete (debe existir en Supabase y devuelve int borradas)
+    print(f"[SUPABASE] Borrando por día exacto vía RPC: {day_csv} ...")
+    rpc_res = supabase.rpc("delete_programacion_by_day", {"p_day": str(day_csv)}).execute()
     if getattr(rpc_res, "error", None):
         raise RuntimeError(rpc_res.error)
+
+    deleted = None
+    data = getattr(rpc_res, "data", None)
+    if isinstance(data, int):
+        deleted = data
+    elif isinstance(data, list) and len(data) > 0:
+        deleted = data[0].get("delete_programacion_by_day")
+    elif isinstance(data, dict):
+        deleted = data.get("delete_programacion_by_day")
+
+    print(f"[SUPABASE] Filas borradas por RPC: {deleted}")
 
     print("[SUPABASE] Insertando filas del día...")
     BATCH = 500
