@@ -3,3 +3,4 @@ playwright
 supabase
 python-dateutil
 datetime
+zoneinfo
