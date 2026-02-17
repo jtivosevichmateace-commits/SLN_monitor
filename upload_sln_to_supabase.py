@@ -11,8 +11,8 @@ from supabase import create_client
 # =========================
 SLN_URL = "https://sistemalogistico.dycsa.cl"
 SLN_USER = os.getenv("SLN_USER")
-SLN_HTTP_USER = os.getenv("SLN_SLN_HTTP_USER")
-SLN_HTTP_PASS = os.getenv("SLN_SLN_HTTP_PASS")  # ideal por env
+SLN_HTTP_USER = os.getenv("SLN_USER")
+SLN_HTTP_PASS = os.getenv("SLN_HTTP_PASS")  # ideal por env
 
 OPTION_TIPO_FECHA = "Fecha Programación de servicio"
 
@@ -244,6 +244,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
