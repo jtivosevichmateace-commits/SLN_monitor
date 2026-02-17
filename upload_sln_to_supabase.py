@@ -11,8 +11,8 @@ from supabase import create_client
 # =========================
 SLN_URL = "https://sistemalogistico.dycsa.cl"
 SLN_USER = os.getenv("SLN_USER")
-HTTP_USER = os.getenv("SLN_HTTP_USER")
-HTTP_PASS = os.getenv("SLN_HTTP_PASS")  # ideal por env
+SLN_HTTP_USER = os.getenv("SLN_SLN_HTTP_USER")
+SLN_HTTP_PASS = os.getenv("SLN_SLN_HTTP_PASS")  # ideal por env
 
 OPTION_TIPO_FECHA = "Fecha Programación de servicio"
 
@@ -74,7 +74,7 @@ def download_csv_from_sln(download_dir: Path) -> Path:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--start-maximized"])
         context = browser.new_context(
-            http_credentials={"username": HTTP_USER, "password": HTTP_PASS},
+            http_credentials={"username": SLN_HTTP_USER, "password": SLN_HTTP_PASS},
             ignore_https_errors=True,
             accept_downloads=True,
         )
@@ -244,6 +244,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
