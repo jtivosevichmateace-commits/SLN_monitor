@@ -95,7 +95,7 @@ def download_csv_from_sln(download_dir: Path) -> Path:
             page.screenshot(path=f"debug/{tag}.png", full_page=True)
             html = page.content()
             with open(f"debug/{tag}.html", "w", encoding="utf-8") as f:
-            f.write(html)
+                f.write(html)
             print(f"[DEBUG] Dump guardado: debug/{tag}.png y debug/{tag}.html")
 
         # ... justo antes del click:
@@ -244,6 +244,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
