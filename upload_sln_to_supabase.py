@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 import pandas as pd
 from playwright.sync_api import sync_playwright
 from supabase import create_client
-from datetime import timedelta
 
 # =========================
 # Helpers
@@ -38,7 +38,12 @@ COL_FECHA = "Fecha Programación de servicio"
 SUPABASE_URL = require_env("SUPABASE_URL")
 SUPABASE_KEY = require_env("SUPABASE_SECRET")  # secret/service role
 SUPABASE_TABLE = "programacion_transporte"
-SUPABASE_RPC_DELETE = "delete_programacion_by_day"  # RPC en Supabase
+
+# RPC que debes haber creado en Supabase:
+# create or replace function public.truncate_programacion()
+# returns void language sql security definer
+# as $$ truncate table public.programacion_transporte; $$;
+SUPABASE_RPC_TRUNCATE = "truncate_programacion"
 
 
 def limpiar_carpeta(ruta: Path):
@@ -96,7 +101,6 @@ def download_csv_from_sln(download_dir: Path) -> Path:
             args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"],
         )
 
-        # ⚠️ importante: fuerza timezone del navegador también
         context = browser.new_context(
             http_credentials={"username": SLN_HTTP_USER, "password": SLN_HTTP_PASS},
             ignore_https_errors=True,
@@ -121,7 +125,6 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         page.get_by_text("Programación de Transporte", exact=False).first.click(timeout=60_000)
         page.get_by_text("Programación de Transporte", exact=False).first.wait_for(timeout=60_000)
 
-        # HOY CHILE para setear filtro SLN
         hoy_cl = datetime.now(TZ_CL)
         fecha_hoy_digits = hoy_cl.strftime("%d%m%Y")
         print(f"[BOT] Fecha Chile usada: {hoy_cl.strftime('%Y-%m-%d %H:%M:%S')} ({fecha_hoy_digits})")
@@ -132,7 +135,6 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         print("[BOT] Seteando Fecha Hasta (hoy)...")
         set_fecha_mask(page.get_by_placeholder("dd-MM-yyyy").nth(1), fecha_hoy_digits)
 
-        # Verifica qué quedó en los inputs
         desde_val = page.get_by_placeholder("dd-MM-yyyy").nth(0).input_value()
         hasta_val = page.get_by_placeholder("dd-MM-yyyy").nth(1).input_value()
         print(f"[BOT] Inputs SLN quedaron: Desde={desde_val} | Hasta={hasta_val}")
@@ -186,7 +188,6 @@ def upload_to_supabase(csv_path: Path):
         if col not in df.columns:
             raise RuntimeError(f"Falta columna '{col}'. Columnas: {list(df.columns)}")
 
-    # Parse fecha SLN
     df[COL_FECHA] = pd.to_datetime(df[COL_FECHA], errors="coerce", dayfirst=True)
 
     df2 = df[[COL_OS, COL_FECHA]].dropna().copy()
@@ -197,26 +198,10 @@ def upload_to_supabase(csv_path: Path):
         print("[CSV] Nada que subir (sin filas válidas).")
         return
 
-    # ✅ Día objetivo: HOY Chile
-    target_day = datetime.now(TZ_CL).date()
-
-    # Día detectado en CSV
-    day_csv = df2[COL_FECHA].dt.date.mode().iloc[0]
-    print(f"[SUPABASE] Día detectado desde CSV: {day_csv} | Día objetivo (Chile): {target_day}")
-
-    # ✅ Si viene corrido, ajustamos al día objetivo
-    if day_csv != target_day:
-        shift_days = (target_day - day_csv).days
-        print(f"[SUPABASE] ⚠️ CSV viene corrido. Aplicando shift: {shift_days} día(s)")
-        df2[COL_FECHA] = df2[COL_FECHA] + pd.to_timedelta(shift_days, unit="D")
-
-    print("[CSV] Rango final fechas:", df2[COL_FECHA].min(), "->", df2[COL_FECHA].max())
-    print("[CSV] Día final (mode):", df2[COL_FECHA].dt.date.mode().iloc[0])
-
-    # timestamp WITHOUT tz => string sin offset
+    # ✅ Si tu tabla es timestamp WITHOUT time zone, sube sin offset
     df2["fecha_programacion_str"] = df2[COL_FECHA].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # updated_at en Chile
+    # updated_at en Chile (visual)
     updated_at = datetime.now(TZ_CL).strftime("%Y-%m-%d %H:%M:%S")
 
     rows = [
@@ -226,30 +211,17 @@ def upload_to_supabase(csv_path: Path):
 
     print(f"[SUPABASE] Filas listas para insertar: {len(rows)}")
 
-    # ✅ BORRAR HOY por rango [00:00, 00:00+1día)
-    start_dt_obj = datetime.combine(target_day, datetime.min.time())
-    end_dt_obj = start_dt_obj + timedelta(days=1)
-    start_dt = start_dt_obj.strftime("%Y-%m-%d %H:%M:%S")
-    end_dt = end_dt_obj.strftime("%Y-%m-%d %H:%M:%S")
-
-    print(f"[SUPABASE] Borrando rango HOY: [{start_dt}, {end_dt}) ...")
-
-    del_res = (
-        supabase
-        .table(SUPABASE_TABLE)
-        .delete()
-        .gte("fecha_programacion", start_dt)
-        .lt("fecha_programacion", end_dt)
-        .execute()
-    )
-    if getattr(del_res, "error", None):
-        raise RuntimeError(del_res.error)
-
-    deleted_count = len(del_res.data or [])
-    print(f"[SUPABASE] Filas borradas (returning): {len(del_res.data or [])}")
+    # ===============================
+    # ✅ TRUNCATE TOTAL (borra todo)
+    # ===============================
+    print("[SUPABASE] Truncando tabla completa...")
+    rpc_res = supabase.rpc(SUPABASE_RPC_TRUNCATE).execute()
+    if getattr(rpc_res, "error", None):
+        raise RuntimeError(rpc_res.error)
+    print("[SUPABASE] ✅ Tabla truncada.")
 
     # Insert por lotes
-    print("[SUPABASE] Insertando filas del día...")
+    print("[SUPABASE] Insertando filas...")
     BATCH = 500
     for i in range(0, len(rows), BATCH):
         chunk = rows[i : i + BATCH]
@@ -257,8 +229,7 @@ def upload_to_supabase(csv_path: Path):
         if getattr(ins_res, "error", None):
             raise RuntimeError(ins_res.error)
 
-    print("[SUPABASE] ✅ Subida OK (delete rango HOY + insert)")
-
+    print("[SUPABASE] ✅ Subida OK (TRUNCATE + INSERT)")
 
 
 def main():
@@ -272,5 +243,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
