@@ -72,7 +72,7 @@ def download_csv_from_sln(download_dir: Path) -> Path:
     limpiar_carpeta(download_dir)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"])
+        browser = p.chromium.launch(headless=True, args=["--start-maximized"])
         context = browser.new_context(
             http_credentials={"username": HTTP_USER, "password": HTTP_PASS},
             ignore_https_errors=True,
@@ -230,4 +230,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
