@@ -16,6 +16,8 @@ def require_env(name: str) -> str:
         raise RuntimeError(f"Falta variable de entorno: {name}")
     return v.strip()
 
+TZ_CL = ZoneInfo("America/Santiago")
+
 # =========================
 # SLN CONFIG
 # =========================
@@ -35,10 +37,8 @@ COL_FECHA = "Fecha Programación de servicio"
 # SUPABASE CONFIG
 # =========================
 SUPABASE_URL = require_env("SUPABASE_URL")
-SUPABASE_KEY = require_env("SUPABASE_SECRET")  # sb_secret...
+SUPABASE_KEY = require_env("SUPABASE_SECRET")
 SUPABASE_TABLE = "programacion_transporte"
-
-TZ_CL = ZoneInfo("America/Santiago")
 
 # ---------------- Helpers ----------------
 def limpiar_carpeta(ruta: Path):
@@ -94,6 +94,7 @@ def download_csv_from_sln(download_dir: Path) -> Path:
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"],
         )
+
         context = browser.new_context(
             http_credentials={"username": SLN_HTTP_USER, "password": SLN_HTTP_PASS},
             ignore_https_errors=True,
@@ -113,12 +114,11 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         page.wait_for_load_state("networkidle", timeout=60_000)
         debug_dump(page, "antes_click_operaciones")
 
-        # Si el texto exact cambia, usa exact=False
         page.get_by_text("Operaciones", exact=False).first.click(timeout=60_000)
         page.get_by_text("Programación de Transporte", exact=False).first.click(timeout=60_000)
         page.get_by_text("Programación de Transporte", exact=False).first.wait_for(timeout=60_000)
 
-        # ✅ HOY EN CHILE (runner está en UTC)
+        # ✅ HOY EN CHILE
         hoy_cl = datetime.now(TZ_CL)
         fecha_hoy_digits = hoy_cl.strftime("%d%m%Y")
         print(f"[BOT] Fecha Chile usada: {hoy_cl.strftime('%Y-%m-%d %H:%M:%S')} ({fecha_hoy_digits})")
@@ -181,19 +181,20 @@ def upload_to_supabase(csv_path: Path):
         if col not in df.columns:
             raise RuntimeError(f"Falta columna '{col}'. Columnas: {list(df.columns)}")
 
-    # Parse fecha (SLN viene dd-MM-yyyy o dd-MM-yyyy HH:mm:ss)
+    # Parse fecha
     df[COL_FECHA] = pd.to_datetime(df[COL_FECHA], errors="coerce", dayfirst=True)
 
-    # Quedarse con OS + FECHA, limpiar nulos
     df2 = df[[COL_OS, COL_FECHA]].dropna().copy()
     df2[COL_OS] = df2[COL_OS].astype(str).str.strip()
 
     print(f"[CSV] Filas válidas (OS+Fecha): {len(df2)}")
+    if df2.empty:
+        raise RuntimeError("CSV sin filas válidas (OS/Fecha).")
 
-    # timestamp WITHOUT time zone -> string sin Z/offset
+    # timestamp WITHOUT time zone -> string sin offset
     df2["fecha_programacion_str"] = df2[COL_FECHA].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # ✅ updated_at en hora Chile (para que lo veas “normal”)
+    # updated_at en hora Chile (visual)
     updated_at = datetime.now(TZ_CL).strftime("%Y-%m-%d %H:%M:%S")
 
     rows = [
@@ -206,27 +207,16 @@ def upload_to_supabase(csv_path: Path):
     ]
 
     print(f"[SUPABASE] Filas listas para insertar: {len(rows)}")
-    if not rows:
-        raise RuntimeError("No hay filas para subir. (CSV vacío o fechas no parseadas)")
 
-    # ✅ Borra SIEMPRE el día de hoy en Chile (no depende del min() del CSV)
+    # ==================================================
+    # ✅ Opción A (Paso 2): BORRADO POR DÍA EXACTO (RPC)
+    # ==================================================
     today_cl = datetime.now(TZ_CL).date()
-    tomorrow_cl = today_cl + timedelta(days=1)
+    print(f"[SUPABASE] Borrando por día exacto vía RPC: {today_cl} ...")
 
-    start_str = datetime.combine(today_cl, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
-    end_str = datetime.combine(tomorrow_cl, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
-
-    print(f"[SUPABASE] (Chile) Hoy={today_cl} -> borrando rango: [{start_str}, {end_str}) ...")
-    del_res = (
-        supabase
-        .table(SUPABASE_TABLE)
-        .delete()
-        .gte("fecha_programacion", start_str)
-        .lt("fecha_programacion", end_str)
-        .execute()
-    )
-    if getattr(del_res, "error", None):
-        raise RuntimeError(del_res.error)
+    rpc_res = supabase.rpc("delete_programacion_by_day", {"p_day": str(today_cl)}).execute()
+    if getattr(rpc_res, "error", None):
+        raise RuntimeError(rpc_res.error)
 
     print("[SUPABASE] Insertando filas del día...")
     BATCH = 500
@@ -236,7 +226,7 @@ def upload_to_supabase(csv_path: Path):
         if getattr(ins_res, "error", None):
             raise RuntimeError(ins_res.error)
 
-    print("[SUPABASE] ✅ Subida OK (modo diario: delete+insert)")
+    print("[SUPABASE] ✅ Subida OK (modo diario: RPC delete + insert)")
 
 def main():
     print("[BOT] Iniciando uploader SLN -> Supabase...")
