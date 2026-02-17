@@ -125,7 +125,10 @@ def download_csv_from_sln(download_dir: Path) -> Path:
 
         print("[BOT] Seteando Fecha Hasta (hoy)...")
         set_fecha_mask(page.get_by_placeholder("dd-MM-yyyy").nth(1), fecha_hoy_digits)
-
+        desde_val = page.get_by_placeholder("dd-MM-yyyy").nth(0).input_value()
+        hasta_val = page.get_by_placeholder("dd-MM-yyyy").nth(1).input_value()
+        print(f"[BOT] Inputs SLN quedaron: Desde={desde_val} | Hasta={hasta_val}")
+        
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
 
@@ -245,3 +248,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
