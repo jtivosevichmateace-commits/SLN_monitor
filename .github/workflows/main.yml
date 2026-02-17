@@ -28,6 +28,12 @@ jobs:
         run: |
           playwright install --with-deps chromium
 
+      # (Opcional pero recomendado) Ver archivos del repo en el runner
+      - name: List repo files
+        run: |
+          ls -la
+          find . -maxdepth 2 -type f -print
+
       - name: Run uploader
         env:
           SLN_USER: ${{ secrets.SLN_USER }}
@@ -36,3 +42,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}
         run: |
+          test -f upload_sln_to_supabase.py
+          python -u upload_sln_to_supabase.py
