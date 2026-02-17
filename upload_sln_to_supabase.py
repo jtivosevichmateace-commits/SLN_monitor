@@ -186,10 +186,9 @@ def upload_to_supabase(csv_path: Path):
         if col not in df.columns:
             raise RuntimeError(f"Falta columna '{col}'. Columnas: {list(df.columns)}")
 
-    # Parse fecha SLN (dayfirst)
+    # Parse fecha SLN
     df[COL_FECHA] = pd.to_datetime(df[COL_FECHA], errors="coerce", dayfirst=True)
 
-    # OS+Fecha
     df2 = df[[COL_OS, COL_FECHA]].dropna().copy()
     df2[COL_OS] = df2[COL_OS].astype(str).str.strip()
     print(f"[CSV] Filas válidas (OS+Fecha): {len(df2)}")
@@ -198,27 +197,26 @@ def upload_to_supabase(csv_path: Path):
         print("[CSV] Nada que subir (sin filas válidas).")
         return
 
-    # ✅ Día objetivo: HOY Chile (lo que debe quedar en Supabase)
+    # ✅ Día objetivo: HOY Chile
     target_day = datetime.now(TZ_CL).date()
 
-    # Día detectado en CSV (moda)
+    # Día detectado en CSV
     day_csv = df2[COL_FECHA].dt.date.mode().iloc[0]
     print(f"[SUPABASE] Día detectado desde CSV: {day_csv} | Día objetivo (Chile): {target_day}")
 
-    # ✅ Si CSV viene corrido, ajustamos fechas al día objetivo
+    # ✅ Si viene corrido, ajustamos al día objetivo
     if day_csv != target_day:
         shift_days = (target_day - day_csv).days
         print(f"[SUPABASE] ⚠️ CSV viene corrido. Aplicando shift: {shift_days} día(s)")
         df2[COL_FECHA] = df2[COL_FECHA] + pd.to_timedelta(shift_days, unit="D")
 
-    # Log final del rango
     print("[CSV] Rango final fechas:", df2[COL_FECHA].min(), "->", df2[COL_FECHA].max())
     print("[CSV] Día final (mode):", df2[COL_FECHA].dt.date.mode().iloc[0])
 
     # timestamp WITHOUT tz => string sin offset
     df2["fecha_programacion_str"] = df2[COL_FECHA].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # updated_at Chile
+    # updated_at en Chile
     updated_at = datetime.now(TZ_CL).strftime("%Y-%m-%d %H:%M:%S")
 
     rows = [
@@ -228,12 +226,26 @@ def upload_to_supabase(csv_path: Path):
 
     print(f"[SUPABASE] Filas listas para insertar: {len(rows)}")
 
-    # ✅ Borrar SIEMPRE el día objetivo (HOY Chile)
-    print(f"[SUPABASE] Borrando por día exacto vía RPC (HOY): {target_day} ...")
-    rpc_res = supabase.rpc(SUPABASE_RPC_DELETE, {"p_day": str(target_day)}).execute()
-    if getattr(rpc_res, "error", None):
-        raise RuntimeError(rpc_res.error)
-    print(f"[SUPABASE] Filas borradas por RPC: {rpc_res.data}")
+    # ✅ BORRAR HOY por rango [00:00, 00:00+1día)
+    start_dt = datetime.combine(target_day, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.combine(target_day, datetime.min.time()).replace(hour=0, minute=0, second=0)
+    end_dt = (end_dt + pd.Timedelta(days=1)).to_pydatetime().strftime("%Y-%m-%d %H:%M:%S")
+
+    print(f"[SUPABASE] Borrando rango HOY: [{start_dt}, {end_dt}) ...")
+
+    del_res = (
+        supabase
+        .table(SUPABASE_TABLE)
+        .delete()
+        .gte("fecha_programacion", start_dt)
+        .lt("fecha_programacion", end_dt)
+        .execute()
+    )
+    if getattr(del_res, "error", None):
+        raise RuntimeError(del_res.error)
+
+    deleted_count = len(del_res.data or [])
+    print(f"[SUPABASE] Filas borradas: {deleted_count}")
 
     # Insert por lotes
     print("[SUPABASE] Insertando filas del día...")
@@ -244,7 +256,8 @@ def upload_to_supabase(csv_path: Path):
         if getattr(ins_res, "error", None):
             raise RuntimeError(ins_res.error)
 
-    print("[SUPABASE] ✅ Subida OK (modo diario: RPC delete HOY + insert)")
+    print("[SUPABASE] ✅ Subida OK (delete rango HOY + insert)")
+
 
 
 def main():
@@ -258,3 +271,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
