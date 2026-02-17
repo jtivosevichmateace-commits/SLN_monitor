@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 from supabase import create_client
 
 # =========================
-# ENV helpers
+# Helpers
 # =========================
 def require_env(name: str) -> str:
     v = os.getenv(name)
@@ -22,7 +22,6 @@ TZ_CL = ZoneInfo("America/Santiago")
 # SLN CONFIG
 # =========================
 SLN_URL = "https://sistemalogistico.dycsa.cl"
-
 SLN_USER = require_env("SLN_USER")
 SLN_HTTP_USER = require_env("SLN_HTTP_USER")
 SLN_HTTP_PASS = require_env("SLN_HTTP_PASS")
@@ -37,10 +36,11 @@ COL_FECHA = "Fecha Programación de servicio"
 # SUPABASE CONFIG
 # =========================
 SUPABASE_URL = require_env("SUPABASE_URL")
-SUPABASE_KEY = require_env("SUPABASE_SECRET")  # service role/secret
+SUPABASE_KEY = require_env("SUPABASE_SECRET")  # secret/service role
 SUPABASE_TABLE = "programacion_transporte"
+SUPABASE_RPC_DELETE = "delete_programacion_by_day"  # RPC en Supabase
 
-# ---------------- Helpers ----------------
+
 def limpiar_carpeta(ruta: Path):
     print("[BOT] Limpiando carpeta de descargas...")
     ruta.mkdir(parents=True, exist_ok=True)
@@ -50,11 +50,13 @@ def limpiar_carpeta(ruta: Path):
         except Exception as e:
             print(f"[WARN] No se pudo borrar {archivo}: {e}")
 
+
 def set_fecha_mask(locator, digits: str):
     locator.click()
     locator.press("Control+A")
     locator.type(digits, delay=60)
     locator.press("Tab")
+
 
 def select_tipo_fecha_with_scroll(page, option_text: str, max_scrolls: int = 60):
     opt = page.get_by_role("option", name=option_text, exact=False)
@@ -71,20 +73,20 @@ def select_tipo_fecha_with_scroll(page, option_text: str, max_scrolls: int = 60)
             return
         listbox.hover()
         page.mouse.wheel(0, 400)
-        page.wait_for_timeout(100)
+        page.wait_for_timeout(120)
 
     raise RuntimeError(f"No se encontró '{option_text}' tras scrollear el dropdown.")
+
 
 def debug_dump(page, tag="debug"):
     os.makedirs("debug", exist_ok=True)
     print(f"[DEBUG] URL actual: {page.url}")
     page.screenshot(path=f"debug/{tag}.png", full_page=True)
-    html = page.content()
     with open(f"debug/{tag}.html", "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(page.content())
     print(f"[DEBUG] Dump guardado: debug/{tag}.png y debug/{tag}.html")
 
-# ---------------- SLN Download ----------------
+
 def download_csv_from_sln(download_dir: Path) -> Path:
     limpiar_carpeta(download_dir)
 
@@ -93,11 +95,16 @@ def download_csv_from_sln(download_dir: Path) -> Path:
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage", "--start-maximized"],
         )
+
+        # ⚠️ importante: fuerza timezone del navegador también
         context = browser.new_context(
             http_credentials={"username": SLN_HTTP_USER, "password": SLN_HTTP_PASS},
             ignore_https_errors=True,
             accept_downloads=True,
+            timezone_id="America/Santiago",
+            locale="es-CL",
         )
+
         page = context.new_page()
 
         print("[BOT] Abriendo SLN...")
@@ -108,14 +115,13 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         page.wait_for_load_state("networkidle", timeout=60_000)
 
         print("[BOT] Navegando a Programación de Transporte...")
-        page.wait_for_load_state("networkidle", timeout=60_000)
         debug_dump(page, "antes_click_operaciones")
 
         page.get_by_text("Operaciones", exact=False).first.click(timeout=60_000)
         page.get_by_text("Programación de Transporte", exact=False).first.click(timeout=60_000)
         page.get_by_text("Programación de Transporte", exact=False).first.wait_for(timeout=60_000)
 
-        # ✅ HOY EN CHILE (solo para filtro en SLN)
+        # HOY CHILE para setear filtro SLN
         hoy_cl = datetime.now(TZ_CL)
         fecha_hoy_digits = hoy_cl.strftime("%d%m%Y")
         print(f"[BOT] Fecha Chile usada: {hoy_cl.strftime('%Y-%m-%d %H:%M:%S')} ({fecha_hoy_digits})")
@@ -125,10 +131,12 @@ def download_csv_from_sln(download_dir: Path) -> Path:
 
         print("[BOT] Seteando Fecha Hasta (hoy)...")
         set_fecha_mask(page.get_by_placeholder("dd-MM-yyyy").nth(1), fecha_hoy_digits)
+
+        # Verifica qué quedó en los inputs
         desde_val = page.get_by_placeholder("dd-MM-yyyy").nth(0).input_value()
         hasta_val = page.get_by_placeholder("dd-MM-yyyy").nth(1).input_value()
         print(f"[BOT] Inputs SLN quedaron: Desde={desde_val} | Hasta={hasta_val}")
-        
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
 
@@ -153,9 +161,7 @@ def download_csv_from_sln(download_dir: Path) -> Path:
                 page.get_by_text("Exportar a Excel", exact=False).click()
 
         download = d.value
-        suggested = download.suggested_filename
-        ext = os.path.splitext(suggested)[1].lower()
-
+        ext = os.path.splitext(download.suggested_filename)[1].lower()
         final_path = download_dir / f"ProgramacionDeTransporte{ext}"
         download.save_as(str(final_path))
 
@@ -165,10 +171,10 @@ def download_csv_from_sln(download_dir: Path) -> Path:
         browser.close()
 
     if ext != ".csv":
-        raise RuntimeError(f"Se descargó {ext} y se esperaba .csv. Ajusta el export si cambió.")
+        raise RuntimeError(f"Se descargó {ext} y se esperaba .csv.")
     return final_path
 
-# ---------------- Supabase Upload ----------------
+
 def upload_to_supabase(csv_path: Path):
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -180,72 +186,75 @@ def upload_to_supabase(csv_path: Path):
         if col not in df.columns:
             raise RuntimeError(f"Falta columna '{col}'. Columnas: {list(df.columns)}")
 
-    # Parse fecha SLN
+    # Parse fecha SLN (dayfirst)
     df[COL_FECHA] = pd.to_datetime(df[COL_FECHA], errors="coerce", dayfirst=True)
 
+    # OS+Fecha
     df2 = df[[COL_OS, COL_FECHA]].dropna().copy()
     df2[COL_OS] = df2[COL_OS].astype(str).str.strip()
-
     print(f"[CSV] Filas válidas (OS+Fecha): {len(df2)}")
+
     if df2.empty:
-        raise RuntimeError("CSV sin filas válidas (OS/Fecha).")
+        print("[CSV] Nada que subir (sin filas válidas).")
+        return
 
-    # ✅ Detectar el día REAL de la data (este es el que debes borrar)
+    # ✅ Día objetivo: HOY Chile (lo que debe quedar en Supabase)
+    target_day = datetime.now(TZ_CL).date()
+
+    # Día detectado en CSV (moda)
     day_csv = df2[COL_FECHA].dt.date.mode().iloc[0]
-    print(f"[SUPABASE] Día detectado desde CSV: {day_csv}")
+    print(f"[SUPABASE] Día detectado desde CSV: {day_csv} | Día objetivo (Chile): {target_day}")
 
-    # Para timestamp WITHOUT time zone, subimos string sin offset
+    # ✅ Si CSV viene corrido, ajustamos fechas al día objetivo
+    if day_csv != target_day:
+        shift_days = (target_day - day_csv).days
+        print(f"[SUPABASE] ⚠️ CSV viene corrido. Aplicando shift: {shift_days} día(s)")
+        df2[COL_FECHA] = df2[COL_FECHA] + pd.to_timedelta(shift_days, unit="D")
+
+    # Log final del rango
+    print("[CSV] Rango final fechas:", df2[COL_FECHA].min(), "->", df2[COL_FECHA].max())
+    print("[CSV] Día final (mode):", df2[COL_FECHA].dt.date.mode().iloc[0])
+
+    # timestamp WITHOUT tz => string sin offset
     df2["fecha_programacion_str"] = df2[COL_FECHA].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # updated_at en hora Chile (visual consistente)
+    # updated_at Chile
     updated_at = datetime.now(TZ_CL).strftime("%Y-%m-%d %H:%M:%S")
 
     rows = [
-        {
-            "os": r[COL_OS],
-            "fecha_programacion": r["fecha_programacion_str"],
-            "updated_at": updated_at,
-        }
+        {"os": r[COL_OS], "fecha_programacion": r["fecha_programacion_str"], "updated_at": updated_at}
         for _, r in df2.iterrows()
     ]
 
     print(f"[SUPABASE] Filas listas para insertar: {len(rows)}")
 
-    # ✅ RPC delete (debe existir en Supabase y devuelve int borradas)
-    print(f"[SUPABASE] Borrando por día exacto vía RPC: {day_csv} ...")
-    rpc_res = supabase.rpc("delete_programacion_by_day", {"p_day": str(day_csv)}).execute()
+    # ✅ Borrar SIEMPRE el día objetivo (HOY Chile)
+    print(f"[SUPABASE] Borrando por día exacto vía RPC (HOY): {target_day} ...")
+    rpc_res = supabase.rpc(SUPABASE_RPC_DELETE, {"p_day": str(target_day)}).execute()
     if getattr(rpc_res, "error", None):
         raise RuntimeError(rpc_res.error)
+    print(f"[SUPABASE] Filas borradas por RPC: {rpc_res.data}")
 
-    deleted = None
-    data = getattr(rpc_res, "data", None)
-    if isinstance(data, int):
-        deleted = data
-    elif isinstance(data, list) and len(data) > 0:
-        deleted = data[0].get("delete_programacion_by_day")
-    elif isinstance(data, dict):
-        deleted = data.get("delete_programacion_by_day")
-
-    print(f"[SUPABASE] Filas borradas por RPC: {deleted}")
-
+    # Insert por lotes
     print("[SUPABASE] Insertando filas del día...")
     BATCH = 500
     for i in range(0, len(rows), BATCH):
-        chunk = rows[i:i + BATCH]
+        chunk = rows[i : i + BATCH]
         ins_res = supabase.table(SUPABASE_TABLE).insert(chunk).execute()
         if getattr(ins_res, "error", None):
             raise RuntimeError(ins_res.error)
 
-    print("[SUPABASE] ✅ Subida OK (modo diario: RPC delete + insert)")
+    print("[SUPABASE] ✅ Subida OK (modo diario: RPC delete HOY + insert)")
+
 
 def main():
     print("[BOT] Iniciando uploader SLN -> Supabase...")
-    BASE_DIR = Path(__file__).resolve().parent
-    download_dir = BASE_DIR / "downloads"
+    base_dir = Path(__file__).resolve().parent
+    download_dir = base_dir / "downloads"
 
     csv_path = download_csv_from_sln(download_dir)
     upload_to_supabase(csv_path)
 
+
 if __name__ == "__main__":
     main()
-
