@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
 import pandas as pd
 from playwright.sync_api import sync_playwright
 from supabase import create_client
+from datetime import timedelta
 
 # =========================
 # Helpers
@@ -227,9 +227,10 @@ def upload_to_supabase(csv_path: Path):
     print(f"[SUPABASE] Filas listas para insertar: {len(rows)}")
 
     # ✅ BORRAR HOY por rango [00:00, 00:00+1día)
-    start_dt = datetime.combine(target_day, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
-    end_dt = datetime.combine(target_day, datetime.min.time()).replace(hour=0, minute=0, second=0)
-    end_dt = (end_dt + pd.Timedelta(days=1)).to_pydatetime().strftime("%Y-%m-%d %H:%M:%S")
+    start_dt_obj = datetime.combine(target_day, datetime.min.time())
+    end_dt_obj = start_dt_obj + timedelta(days=1)
+    start_dt = start_dt_obj.strftime("%Y-%m-%d %H:%M:%S")
+    end_dt = end_dt_obj.strftime("%Y-%m-%d %H:%M:%S")
 
     print(f"[SUPABASE] Borrando rango HOY: [{start_dt}, {end_dt}) ...")
 
@@ -245,7 +246,7 @@ def upload_to_supabase(csv_path: Path):
         raise RuntimeError(del_res.error)
 
     deleted_count = len(del_res.data or [])
-    print(f"[SUPABASE] Filas borradas: {deleted_count}")
+    print(f"[SUPABASE] Filas borradas (returning): {len(del_res.data or [])}")
 
     # Insert por lotes
     print("[SUPABASE] Insertando filas del día...")
@@ -271,4 +272,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
