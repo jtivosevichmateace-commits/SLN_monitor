@@ -42,7 +42,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}
         run: |
-          test -f upload_sln_to_supabase.py
           python -u upload_sln_to_supabase.py
 
       - name: Upload debug artifacts
