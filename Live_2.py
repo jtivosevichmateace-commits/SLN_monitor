@@ -73,9 +73,9 @@ with c_time1:
     st.caption(f"🕒 Hora actual: **{now_ui.strftime('%Y-%m-%d %H:%M:%S')}**")
 with c_time2:
     if last_updated is not None and pd.notna(last_updated):
-        st.caption(f"🗄️ Última lectura (Supabase): **{last_updated.strftime('%Y-%m-%d %H:%M:%S')}**")
+        st.caption(f"🗄️ Última lectura: **{last_updated.strftime('%Y-%m-%d %H:%M:%S')}**")
     else:
-        st.caption("🗄️ Última lectura (Supabase): **—**")
+        st.caption("🗄️ Última lectura: **—**")
 
 # ---------------- VALIDACIONES ----------------
 missing = [c for c in [COL_OS_DB, COL_FECHA_DB] if c not in df.columns]
@@ -216,4 +216,5 @@ def style_row(row):
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
