@@ -64,9 +64,9 @@ now_ui = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
 
 last_updated = None
 if not df.empty and COL_UPDATED_DB in df.columns:
-    tmp = pd.to_datetime(df[COL_UPDATED_DB], errors="coerce", utc=True)
+    tmp = pd.to_datetime(df[COL_UPDATED_DB], errors="coerce")
     if tmp.notna().any():
-        last_updated = tmp.dt.tz_convert("America/Santiago").dt.tz_localize(None).max()
+        last_updated = tmp.max()
 
 c_time1, c_time2 = st.columns(2)
 with c_time1:
@@ -216,3 +216,4 @@ def style_row(row):
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
