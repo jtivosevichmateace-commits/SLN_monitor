@@ -4,4 +4,5 @@ supabase
 python-dateutil
 datetime
 streamlit
+streamlit-autorefresh
 altair==4.2.2
