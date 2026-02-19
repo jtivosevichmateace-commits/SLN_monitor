@@ -2,3 +2,5 @@ pandas
 playwright
 supabase
 python-dateutil
+streamlit
+streamlit-autorefresh
