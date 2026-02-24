@@ -181,30 +181,38 @@ with c3:
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 # ---------------- GRÁFICO DE ANILLOS POR ESTADO (EN EXPANDER) ----------------
+
+# Distribución de estados
 dist_estado = (
     df.groupby("EstadoTiempo")
       .size()
       .reset_index(name="cantidad")
 )
 
-# Si quieres excluir SIN FECHA del gráfico, descomenta esta línea:
-# dist_estado = dist_estado[dist_estado["EstadoTiempo"] != "SIN FECHA"]
+# Colores personalizados para que coincidan con los KPI
+color_scale = alt.Scale(
+    domain=["VENCIDO", "URGENTE", "POR VENCER"],
+    range=["#FF5252", "#FFA500", "#FFF176"]  # rojo, naranja, amarillo
+)
 
 donut_chart = (
     alt.Chart(dist_estado)
-    .mark_arc(innerRadius=60)  # innerRadius > 0 => anillo en vez de torta
+    .mark_arc(innerRadius=60)
     .encode(
         theta="cantidad:Q",
-        color="EstadoTiempo:N",
+        color=alt.Color("EstadoTiempo:N", scale=color_scale, legend=alt.Legend(
+            title="EstadoTiempo",
+            labelFontWeight="bold",   # NEGRITA EN LEYENDA
+            titleFontWeight="bold"
+        )),
         tooltip=["EstadoTiempo", "cantidad"]
     )
+    .properties(height=420)
 )
 
 with st.expander("Mostrar distribución de casos por estado"):
     st.subheader("Distribución de casos por estado")
     st.altair_chart(donut_chart, use_container_width=True)
-
-st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 # ---------------- ORDEN ----------------
 order_map = {"VENCIDO": 0, "URGENTE": 1, "POR VENCER": 2, "SIN FECHA": 3}
@@ -243,3 +251,4 @@ def style_row(row):
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
