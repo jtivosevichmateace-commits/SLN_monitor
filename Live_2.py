@@ -260,7 +260,7 @@ tabla["Riesgo"] = tabla["EstadoTiempo"].apply(icono_estado)
 tabla = tabla[["Riesgo", "O/S", "Fecha Programación de servicio", "EstadoTiempo", "DetalleTiempo"]]
 
 # ---------------- ROTACIÓN DE VISTAS (VENCIDOS vs URGENTES+POR VENCER) ----------------
-ROTATION_WINDOW = 30  # cantidad de refrescos antes de cambiar (30 ≈ 30 segundos con interval=1000)
+ROTATION_WINDOW = 15  # cantidad de refrescos antes de cambiar (30 ≈ 30 segundos con interval=1000)
 
 try:
     phase = (refresh_counter // ROTATION_WINDOW) % 2
@@ -270,11 +270,11 @@ except NameError:
 if phase == 0:
     # Vista 1: solo vencidos
     tabla_view = tabla[tabla["EstadoTiempo"] == "VENCIDO"].copy()
-    view_title = "Casos VENCIDOS"
+    view_title = "Casos Vencidos"
 else:
     # Vista 2: urgentes + por vencer
     tabla_view = tabla[tabla["EstadoTiempo"].isin(["URGENTE", "POR VENCER"])].copy()
-    view_title = "Casos URGENTES y POR VENCER"
+    view_title = "Casos Urgentes y Por Vencer"
 
 st.subheader(view_title)
 
@@ -305,3 +305,4 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
