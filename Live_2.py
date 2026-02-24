@@ -202,8 +202,8 @@ donut_chart = (
         theta="cantidad:Q",
         color=alt.Color("EstadoTiempo:N", scale=color_scale, legend=alt.Legend(
             title="EstadoTiempo",
-            labelFontWeight="bold",   # NEGRITA EN LEYENDA
-            titleFontWeight="bold"
+            labelFontWeight="normal",   
+            titleFontWeight="bold"        # NEGRITA TITULO LEYENDA
         )),
         tooltip=["EstadoTiempo", "cantidad"]
     )
@@ -251,4 +251,5 @@ def style_row(row):
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
