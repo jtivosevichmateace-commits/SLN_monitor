@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from streamlit_autorefresh import st_autorefresh
 from supabase import create_client, Client
+import altair as alt
 
 # ---------------- SUPABASE ----------------
 SUPABASE_URL = st.secrets["supabase"]["url"]
@@ -179,6 +180,34 @@ with c3:
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
+# ---------------- GRÁFICO DE ANILLOS POR ESTADO ----------------
+# Usamos la columna "EstadoTiempo" que ya calculaste: VENCIDO / URGENTE / POR VENCER / SIN FECHA
+
+dist_estado = (
+    df.groupby("EstadoTiempo")
+      .size()
+      .reset_index(name="cantidad")
+)
+
+# Si quieres excluir SIN FECHA del gráfico, descomenta esta línea:
+# dist_estado = dist_estado[dist_estado["EstadoTiempo"] != "SIN FECHA"]
+
+st.subheader("Distribución de casos por estado")
+
+donut_chart = (
+    alt.Chart(dist_estado)
+    .mark_arc(innerRadius=60)  # innerRadius > 0 => anillo en vez de torta
+    .encode(
+        theta="cantidad:Q",
+        color="EstadoTiempo:N",
+        tooltip=["EstadoTiempo", "cantidad"]
+    )
+)
+
+st.altair_chart(donut_chart, use_container_width=True)
+
+st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
 # ---------------- ORDEN ----------------
 order_map = {"VENCIDO": 0, "URGENTE": 1, "POR VENCER": 2, "SIN FECHA": 3}
 df["_ord"] = df["EstadoTiempo"].map(order_map).fillna(99)
@@ -216,5 +245,6 @@ def style_row(row):
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
