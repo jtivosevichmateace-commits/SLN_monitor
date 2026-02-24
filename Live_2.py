@@ -6,6 +6,7 @@ from streamlit_autorefresh import st_autorefresh
 from supabase import create_client, Client
 import altair as alt
 
+
 # ---------------- SUPABASE ----------------
 SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["anon_key"]  # publishable key
@@ -16,6 +17,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 COL_OS_DB = "os"
 COL_FECHA_DB = "fecha_programacion"
 COL_UPDATED_DB = "updated_at"
+
 
 # ---------------- STREAMLIT ----------------
 st.set_page_config(page_title="Vencimientos de Casos", layout="wide")
@@ -46,6 +48,7 @@ h1 { margin-bottom: 0.2rem !important; }
 st_autorefresh(interval=1000, key="refresh")
 st.title("DashBoard Vencimientos de Casos")
 
+
 # ---------------- LOAD DATA ----------------
 def load_data_from_supabase() -> pd.DataFrame:
     resp = (
@@ -59,6 +62,7 @@ def load_data_from_supabase() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 df = load_data_from_supabase()
+
 
 # ---------------- RELOJ + ÚLTIMA LECTURA (SUPABASE) ----------------
 now_ui = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
@@ -78,6 +82,7 @@ with c_time2:
     else:
         st.caption("🗄️ Última lectura: **—**")
 
+
 # ---------------- VALIDACIONES ----------------
 missing = [c for c in [COL_OS_DB, COL_FECHA_DB] if c not in df.columns]
 if missing:
@@ -88,7 +93,7 @@ if df.empty:
     st.warning("Supabase respondió OK, pero no hay filas en la tabla todavía.")
     st.stop()
 
-# ---------------- FECHAS (✅ FIX DEFINITIVO) ----------------
+# ---------------- FECHAS ----------------
 # Parse normal (puede venir naive o tz-aware con -03:00)
 dt = pd.to_datetime(df[COL_FECHA_DB], errors="coerce")
 
@@ -141,6 +146,7 @@ for dtx in df[COL_FECHA_DB]:
 df["EstadoTiempo"] = estados
 df["DetalleTiempo"] = detalles
 
+
 # ---------------- KPIs ----------------
 vencidos = int((df["EstadoTiempo"] == "VENCIDO").sum())
 urgentes = int((df["EstadoTiempo"] == "URGENTE").sum())
@@ -180,19 +186,25 @@ with c3:
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
+
 # ---------------- GRÁFICO DE ANILLOS POR ESTADO (EN EXPANDER) ----------------
 
-# Distribución de estados
 dist_estado = (
     df.groupby("EstadoTiempo")
       .size()
       .reset_index(name="cantidad")
 )
 
-# Colores personalizados para que coincidan con los KPI
+
+# Calcular porcentaje
+total = dist_estado["cantidad"].sum()
+dist_estado["porcentaje"] = (dist_estado["cantidad"] / total * 100).round(1)
+
+
+# Colores personalizados
 color_scale = alt.Scale(
     domain=["VENCIDO", "URGENTE", "POR VENCER"],
-    range=["#FF5252", "#FFA500", "#FFF176"]  # rojo, naranja, amarillo
+    range=["#FF5252", "#FFA500", "#FFF176"]
 )
 
 donut_chart = (
@@ -200,12 +212,20 @@ donut_chart = (
     .mark_arc(innerRadius=60)
     .encode(
         theta="cantidad:Q",
-        color=alt.Color("EstadoTiempo:N", scale=color_scale, legend=alt.Legend(
-            title="EstadoTiempo",
-            labelFontWeight="normal",   
-            titleFontWeight="bold"        # NEGRITA TITULO LEYENDA
-        )),
-        tooltip=["EstadoTiempo", "cantidad"]
+        color=alt.Color(
+            "EstadoTiempo:N",
+            scale=color_scale,
+            legend=alt.Legend(
+                title="EstadoTiempo",
+                titleFontWeight="bold",
+                labelFontWeight="normal"
+            )
+        ),
+        tooltip=[
+            alt.Tooltip("EstadoTiempo:N", title="Estado"),
+            alt.Tooltip("cantidad:Q", title="Cantidad"),
+            alt.Tooltip("porcentaje:Q", title="Porcentaje (%)")
+        ]
     )
     .properties(height=420)
 )
@@ -214,10 +234,12 @@ with st.expander("Mostrar distribución de casos por estado"):
     st.subheader("Distribución de casos por estado")
     st.altair_chart(donut_chart, use_container_width=True)
 
+
 # ---------------- ORDEN ----------------
 order_map = {"VENCIDO": 0, "URGENTE": 1, "POR VENCER": 2, "SIN FECHA": 3}
 df["_ord"] = df["EstadoTiempo"].map(order_map).fillna(99)
 df = df.sort_values(by=["_ord", COL_FECHA_DB]).drop(columns=["_ord"])
+
 
 # ---------------- PARPADEO (URGENTE <30m) ----------------
 blink_on = (datetime.now(ZoneInfo("America/Santiago")).second % 2 == 0)
