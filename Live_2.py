@@ -43,7 +43,9 @@ h1 { margin-bottom: 0.2rem !important; }
     unsafe_allow_html=True,
 )
 
-st_autorefresh(interval=1000, key="refresh")
+# Contador de autorefresh (1 segundo)
+refresh_counter = st_autorefresh(interval=1000, key="refresh")
+
 st.title("DashBoard Vencimientos de Casos")
 
 # ---------------- LOAD DATA ----------------
@@ -89,10 +91,9 @@ if df.empty:
     st.stop()
 
 # ---------------- FECHAS (✅ FIX DEFINITIVO) ----------------
-# Parse normal (puede venir naive o tz-aware con -03:00)
 dt = pd.to_datetime(df[COL_FECHA_DB], errors="coerce")
 
-# Si viene tz-aware (ej: 05:00-03:00), lo pasamos a UTC (08:00+00) y quitamos tz => 08:00
+# Si viene tz-aware, convertir a UTC y luego quitar tz
 try:
     if getattr(dt.dt, "tz", None) is not None:
         dt = dt.dt.tz_convert("UTC").dt.tz_localize(None)
@@ -181,7 +182,6 @@ with c3:
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 # ---------------- GRÁFICO DE ANILLOS POR ESTADO (EN EXPANDER) ----------------
-
 dist_estado = (
     df.groupby("EstadoTiempo")
       .size()
@@ -235,7 +235,7 @@ df = df.sort_values(by=["_ord", COL_FECHA_DB]).drop(columns=["_ord"])
 # ---------------- PARPADEO (URGENTE <30m) ----------------
 blink_on = (datetime.now(ZoneInfo("America/Santiago")).second % 2 == 0)
 
-# Tabla base
+# ---------------- TABLA BASE ----------------
 tabla = df[[COL_OS_DB, "fecha_programacion_display", "EstadoTiempo", "DetalleTiempo"]].copy()
 tabla = tabla.rename(
     columns={
@@ -244,7 +244,7 @@ tabla = tabla.rename(
     }
 ).reset_index(drop=True)
 
-# ---------------- ICONO DE RIESGO ----------------
+# ICONO DE RIESGO
 def icono_estado(est):
     if est == "VENCIDO":
         return "🔴"
@@ -259,15 +259,35 @@ tabla["Riesgo"] = tabla["EstadoTiempo"].apply(icono_estado)
 # Reordenar columnas para que Riesgo vaya primero
 tabla = tabla[["Riesgo", "O/S", "Fecha Programación de servicio", "EstadoTiempo", "DetalleTiempo"]]
 
+# ---------------- ROTACIÓN DE VISTAS (VENCIDOS vs URGENTES+POR VENCER) ----------------
+ROTATION_WINDOW = 30  # cantidad de refrescos antes de cambiar (30 ≈ 30 segundos con interval=1000)
+
+try:
+    phase = (refresh_counter // ROTATION_WINDOW) % 2
+except NameError:
+    phase = 0  # por si se ejecuta sin autorefresh
+
+if phase == 0:
+    # Vista 1: solo vencidos
+    tabla_view = tabla[tabla["EstadoTiempo"] == "VENCIDO"].copy()
+    view_title = "Casos VENCIDOS"
+else:
+    # Vista 2: urgentes + por vencer
+    tabla_view = tabla[tabla["EstadoTiempo"].isin(["URGENTE", "POR VENCER"])].copy()
+    view_title = "Casos URGENTES y POR VENCER"
+
+st.subheader(view_title)
+
+# ---------------- ESTILOS FILAS ----------------
 def style_row(row):
     styles = [""] * len(row)
+    idx_riesgo = row.index.get_loc("Riesgo")
     idx_estado = row.index.get_loc("EstadoTiempo")
     idx_detalle = row.index.get_loc("DetalleTiempo")
-    idx_riesgo = row.index.get_loc("Riesgo")
 
     if row["EstadoTiempo"] == "VENCIDO":
         styles[idx_estado] = "color:red; font-weight:900;"
-        styles[idx_riesgo] = "font-size:20px;"  # icono grande
+        styles[idx_riesgo] = "font-size:20px;"
     elif row["EstadoTiempo"] == "URGENTE":
         if blink_on:
             styles[idx_estado] = "color:orange; font-weight:900;"
@@ -283,5 +303,5 @@ def style_row(row):
 
     return styles
 
-styled_df = tabla.style.apply(style_row, axis=1)
+styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
