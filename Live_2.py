@@ -180,9 +180,7 @@ with c3:
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-# ---------------- GRÁFICO DE ANILLOS POR ESTADO ----------------
-# Usamos la columna "EstadoTiempo" que ya calculaste: VENCIDO / URGENTE / POR VENCER / SIN FECHA
-
+# ---------------- GRÁFICO DE ANILLOS POR ESTADO (EN EXPANDER) ----------------
 dist_estado = (
     df.groupby("EstadoTiempo")
       .size()
@@ -191,8 +189,6 @@ dist_estado = (
 
 # Si quieres excluir SIN FECHA del gráfico, descomenta esta línea:
 # dist_estado = dist_estado[dist_estado["EstadoTiempo"] != "SIN FECHA"]
-
-st.subheader("Distribución de casos por estado")
 
 donut_chart = (
     alt.Chart(dist_estado)
@@ -204,7 +200,9 @@ donut_chart = (
     )
 )
 
-st.altair_chart(donut_chart, use_container_width=True)
+with st.expander("Mostrar distribución de casos por estado"):
+    st.subheader("Distribución de casos por estado")
+    st.altair_chart(donut_chart, use_container_width=True)
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
@@ -245,6 +243,3 @@ def style_row(row):
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
-
-
-
