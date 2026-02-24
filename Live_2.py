@@ -6,7 +6,6 @@ from streamlit_autorefresh import st_autorefresh
 from supabase import create_client, Client
 import altair as alt
 
-
 # ---------------- SUPABASE ----------------
 SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["anon_key"]  # publishable key
@@ -17,7 +16,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 COL_OS_DB = "os"
 COL_FECHA_DB = "fecha_programacion"
 COL_UPDATED_DB = "updated_at"
-
 
 # ---------------- STREAMLIT ----------------
 st.set_page_config(page_title="Vencimientos de Casos", layout="wide")
@@ -48,7 +46,6 @@ h1 { margin-bottom: 0.2rem !important; }
 st_autorefresh(interval=1000, key="refresh")
 st.title("DashBoard Vencimientos de Casos")
 
-
 # ---------------- LOAD DATA ----------------
 def load_data_from_supabase() -> pd.DataFrame:
     resp = (
@@ -62,7 +59,6 @@ def load_data_from_supabase() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 df = load_data_from_supabase()
-
 
 # ---------------- RELOJ + ÚLTIMA LECTURA (SUPABASE) ----------------
 now_ui = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
@@ -82,7 +78,6 @@ with c_time2:
     else:
         st.caption("🗄️ Última lectura: **—**")
 
-
 # ---------------- VALIDACIONES ----------------
 missing = [c for c in [COL_OS_DB, COL_FECHA_DB] if c not in df.columns]
 if missing:
@@ -93,7 +88,7 @@ if df.empty:
     st.warning("Supabase respondió OK, pero no hay filas en la tabla todavía.")
     st.stop()
 
-# ---------------- FECHAS ----------------
+# ---------------- FECHAS (✅ FIX DEFINITIVO) ----------------
 # Parse normal (puede venir naive o tz-aware con -03:00)
 dt = pd.to_datetime(df[COL_FECHA_DB], errors="coerce")
 
@@ -146,7 +141,6 @@ for dtx in df[COL_FECHA_DB]:
 df["EstadoTiempo"] = estados
 df["DetalleTiempo"] = detalles
 
-
 # ---------------- KPIs ----------------
 vencidos = int((df["EstadoTiempo"] == "VENCIDO").sum())
 urgentes = int((df["EstadoTiempo"] == "URGENTE").sum())
@@ -186,7 +180,6 @@ with c3:
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-
 # ---------------- GRÁFICO DE ANILLOS POR ESTADO (EN EXPANDER) ----------------
 
 dist_estado = (
@@ -195,11 +188,9 @@ dist_estado = (
       .reset_index(name="cantidad")
 )
 
-
 # Calcular porcentaje
 total = dist_estado["cantidad"].sum()
 dist_estado["porcentaje"] = (dist_estado["cantidad"] / total * 100).round(1)
-
 
 # Colores personalizados
 color_scale = alt.Scale(
@@ -234,16 +225,17 @@ with st.expander("Gráfico de casos por estado"):
     st.subheader("Distribución de casos por estado")
     st.altair_chart(donut_chart, use_container_width=True)
 
+st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
 # ---------------- ORDEN ----------------
 order_map = {"VENCIDO": 0, "URGENTE": 1, "POR VENCER": 2, "SIN FECHA": 3}
 df["_ord"] = df["EstadoTiempo"].map(order_map).fillna(99)
 df = df.sort_values(by=["_ord", COL_FECHA_DB]).drop(columns=["_ord"])
 
-
 # ---------------- PARPADEO (URGENTE <30m) ----------------
 blink_on = (datetime.now(ZoneInfo("America/Santiago")).second % 2 == 0)
 
+# Tabla base
 tabla = df[[COL_OS_DB, "fecha_programacion_display", "EstadoTiempo", "DetalleTiempo"]].copy()
 tabla = tabla.rename(
     columns={
@@ -252,27 +244,44 @@ tabla = tabla.rename(
     }
 ).reset_index(drop=True)
 
+# ---------------- ICONO DE RIESGO ----------------
+def icono_estado(est):
+    if est == "VENCIDO":
+        return "🔴"
+    if est == "URGENTE":
+        return "🟠"
+    if est == "POR VENCER":
+        return "🟡"
+    return "⚪"
+
+tabla["Riesgo"] = tabla["EstadoTiempo"].apply(icono_estado)
+
+# Reordenar columnas para que Riesgo vaya primero
+tabla = tabla[["Riesgo", "O/S", "Fecha Programación de servicio", "EstadoTiempo", "DetalleTiempo"]]
+
 def style_row(row):
     styles = [""] * len(row)
     idx_estado = row.index.get_loc("EstadoTiempo")
     idx_detalle = row.index.get_loc("DetalleTiempo")
+    idx_riesgo = row.index.get_loc("Riesgo")
 
     if row["EstadoTiempo"] == "VENCIDO":
         styles[idx_estado] = "color:red; font-weight:900;"
+        styles[idx_riesgo] = "font-size:20px;"  # icono grande
     elif row["EstadoTiempo"] == "URGENTE":
         if blink_on:
             styles[idx_estado] = "color:orange; font-weight:900;"
             styles[idx_detalle] = "color:orange; font-weight:800;"
+            styles[idx_riesgo] = "font-size:20px;"
         else:
             styles[idx_estado] = "color:rgba(255,165,0,0.25); font-weight:900;"
             styles[idx_detalle] = "color:rgba(255,165,0,0.25); font-weight:800;"
+            styles[idx_riesgo] = "font-size:20px; opacity:0.25;"
     elif row["EstadoTiempo"] == "POR VENCER":
         styles[idx_estado] = "color:#FFF176; font-weight:900;"
+        styles[idx_riesgo] = "font-size:20px;"
 
     return styles
 
 styled_df = tabla.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
-
-
-
