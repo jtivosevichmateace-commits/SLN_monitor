@@ -46,7 +46,7 @@ h1 { margin-bottom: 0.2rem !important; }
 # Contador de autorefresh (1 segundo)
 refresh_counter = st_autorefresh(interval=1000, key="refresh")
 
-st.title("DashBoard Vencimientos de Casos")
+st.title("Vencimientos Servicios de HOY")
 
 # ---------------- LOAD DATA ----------------
 def load_data_from_supabase() -> pd.DataFrame:
@@ -305,4 +305,5 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
