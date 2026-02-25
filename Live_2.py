@@ -98,6 +98,7 @@ with c_time2:
         """,
         unsafe_allow_html=True
     )
+st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
 # ---------------- VALIDACIONES ----------------
 missing = [c for c in [COL_OS_DB, COL_FECHA_DB] if c not in df.columns]
@@ -324,6 +325,7 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
 
