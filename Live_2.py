@@ -222,7 +222,7 @@ donut_chart = (
 )
 
 with st.expander("Gráfico de casos por estado"):
-    st.subheader("Distribución de casos por estado")
+    st.subheader("Distribución de servicios por estado")
     st.altair_chart(donut_chart, use_container_width=True)
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
@@ -305,6 +305,7 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
 
