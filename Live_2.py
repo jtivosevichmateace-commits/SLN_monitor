@@ -270,11 +270,11 @@ except NameError:
 if phase == 0:
     # Vista 1: solo vencidos
     tabla_view = tabla[tabla["EstadoTiempo"] == "VENCIDO"].copy()
-    view_title = "Casos Vencidos"
+    view_title = "Servicios Vencidos"
 else:
     # Vista 2: urgentes + por vencer
     tabla_view = tabla[tabla["EstadoTiempo"].isin(["URGENTE", "POR VENCER"])].copy()
-    view_title = "Casos Urgentes y Por Vencer"
+    view_title = "Servicios Urgentes y Por Vencer"
 
 st.subheader(view_title)
 
@@ -305,5 +305,6 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
