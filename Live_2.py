@@ -71,10 +71,17 @@ if not df.empty and COL_UPDATED_DB in df.columns:
     if tmp.notna().any():
         last_updated = tmp.max()
 
-c_time1, c_time2 = st.columns(2)
+# Usamos 3 columnas para alinear con las 3 tarjetas KPI
+c_time1, c_time2, c_time3 = st.columns(3)
+
 with c_time1:
     st.caption(f"🕒 Hora actual: **{now_ui.strftime('%Y-%m-%d %H:%M:%S')}**")
+
 with c_time2:
+    # Columna central vacía (queda alineada sobre 'Urgentes')
+    st.write("")
+
+with c_time3:
     if last_updated is not None and pd.notna(last_updated):
         st.caption(f"🗄️ Última lectura: **{last_updated.strftime('%Y-%m-%d %H:%M:%S')}**")
     else:
@@ -305,6 +312,7 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
 
