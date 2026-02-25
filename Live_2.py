@@ -18,7 +18,7 @@ COL_FECHA_DB = "fecha_programacion"
 COL_UPDATED_DB = "updated_at"
 
 # ---------------- STREAMLIT ----------------
-st.set_page_config(page_title="Vencimientos de Casos", page_icon="assets/favicon.png" , layout="wide")
+st.set_page_config(page_title="Vencimientos de Casos", page_icon="favicon.png" , layout="wide")
 
 st.markdown(
     """
@@ -325,6 +325,7 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
 
