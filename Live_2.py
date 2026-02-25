@@ -62,6 +62,7 @@ def load_data_from_supabase() -> pd.DataFrame:
 
 df = load_data_from_supabase()
 
+
 # ---------------- RELOJ + ÚLTIMA LECTURA (SUPABASE) ----------------
 now_ui = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
 
@@ -71,21 +72,32 @@ if not df.empty and COL_UPDATED_DB in df.columns:
     if tmp.notna().any():
         last_updated = tmp.max()
 
-# Usamos 3 columnas para alinear con las 3 tarjetas KPI
-c_time1, c_time2, c_time3 = st.columns(3)
+c_time1, c_time2 = st.columns([1, 1])
 
 with c_time1:
-    st.caption(f"🕒 Hora actual: **{now_ui.strftime('%Y-%m-%d %H:%M:%S')}**")
+    st.markdown(
+        f"""
+        <div style="text-align:left;">
+            🕒 Hora actual: <b>{now_ui.strftime('%Y-%m-%d %H:%M:%S')}</b>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 with c_time2:
-    # Columna central vacía (queda alineada sobre 'Urgentes')
-    st.write("")
-
-with c_time3:
     if last_updated is not None and pd.notna(last_updated):
-        st.caption(f"🗄️ Última lectura: **{last_updated.strftime('%Y-%m-%d %H:%M:%S')}**")
+        ultima_txt = last_updated.strftime('%Y-%m-%d %H:%M:%S')
     else:
-        st.caption("🗄️ Última lectura: **—**")
+        ultima_txt = "—"
+
+    st.markdown(
+        f"""
+        <div style="text-align:right;">
+            🗄️ Última lectura: <b>{ultima_txt}</b>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # ---------------- VALIDACIONES ----------------
 missing = [c for c in [COL_OS_DB, COL_FECHA_DB] if c not in df.columns]
@@ -312,6 +324,7 @@ def style_row(row):
 
 styled_df = tabla_view.style.apply(style_row, axis=1)
 st.dataframe(styled_df, use_container_width=True, hide_index=True, height=720)
+
 
 
 
