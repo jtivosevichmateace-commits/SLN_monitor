@@ -8,7 +8,7 @@ import altair as alt
 
 # ---------------- SUPABASE ----------------
 SUPABASE_URL = st.secrets["supabase"]["url"]
-SUPABASE_KEY = st.secrets["supabase"]["anon_key"]  # publishable key
+SUPABASE_KEY = st.secrets["supabase"]["anon_key"]  # Secret key 
 SUPABASE_TABLE = "programacion_transporte"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
