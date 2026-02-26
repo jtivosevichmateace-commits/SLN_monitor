@@ -43,10 +43,12 @@ h1 { margin-bottom: 0.2rem !important; }
     unsafe_allow_html=True,
 )
 
-# Contador de autorefresh (1 segundo)
+
+# CONTADOR DE AUTOREFRESH (1 SEGUNDO)
 refresh_counter = st_autorefresh(interval=1000, key="refresh")
 
 st.title("Vencimientos Servicios de HOY")
+
 
 # ---------------- LOAD DATA ----------------
 def load_data_from_supabase() -> pd.DataFrame:
@@ -63,7 +65,7 @@ def load_data_from_supabase() -> pd.DataFrame:
 df = load_data_from_supabase()
 
 
-# ---------------- RELOJ + ÚLTIMA LECTURA (SUPABASE) ----------------
+# ---------------- RELOJ + ÚLTIMA LECTURA EN SUPABASE ----------------
 now_ui = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
 
 last_updated = None
@@ -100,6 +102,8 @@ with c_time2:
     )
 st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
+
+
 # ---------------- VALIDACIONES ----------------
 missing = [c for c in [COL_OS_DB, COL_FECHA_DB] if c not in df.columns]
 if missing:
@@ -110,7 +114,9 @@ if df.empty:
     st.warning("Supabase respondió OK, pero no hay filas en la tabla todavía.")
     st.stop()
 
-# ---------------- FECHAS (✅ FIX DEFINITIVO) ----------------
+
+
+# -------------------- FECHAS --------------------
 dt = pd.to_datetime(df[COL_FECHA_DB], errors="coerce")
 
 # Si viene tz-aware, convertir a UTC y luego quitar tz
@@ -123,7 +129,8 @@ except Exception:
 df[COL_FECHA_DB] = dt
 df["fecha_programacion_display"] = df[COL_FECHA_DB].dt.strftime("%Y-%m-%d %H:%M:%S").astype(str)
 
-# now para cálculos (Chile naive)
+
+# NOW PARA CALCULOS CON CHILE
 now = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
 
 def human_diff(target_dt: datetime):
@@ -161,6 +168,8 @@ for dtx in df[COL_FECHA_DB]:
 
 df["EstadoTiempo"] = estados
 df["DetalleTiempo"] = detalles
+
+
 
 # ---------------- KPIs ----------------
 vencidos = int((df["EstadoTiempo"] == "VENCIDO").sum())
@@ -201,18 +210,22 @@ with c3:
 
 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-# ---------------- GRÁFICO DE ANILLOS POR ESTADO (EN EXPANDER) ----------------
+
+
+# ---------------- GRÁFICO DE ANILLOS POR ESTADO ----------------
 dist_estado = (
     df.groupby("EstadoTiempo")
       .size()
       .reset_index(name="cantidad")
 )
 
-# Calcular porcentaje
+
+
+# CALCULAR PORCENTAJES
 total = dist_estado["cantidad"].sum()
 dist_estado["porcentaje"] = (dist_estado["cantidad"] / total * 100).round(1)
 
-# Colores personalizados
+# COLORES PERSONALIZADOS
 color_scale = alt.Scale(
     domain=["VENCIDO", "URGENTE", "POR VENCER"],
     range=["#FF5252", "#FFA500", "#FFF176"]
@@ -252,8 +265,12 @@ order_map = {"VENCIDO": 0, "URGENTE": 1, "POR VENCER": 2, "SIN FECHA": 3}
 df["_ord"] = df["EstadoTiempo"].map(order_map).fillna(99)
 df = df.sort_values(by=["_ord", COL_FECHA_DB]).drop(columns=["_ord"])
 
+
+
 # ---------------- PARPADEO (URGENTE <30m) ----------------
 blink_on = (datetime.now(ZoneInfo("America/Santiago")).second % 2 == 0)
+
+
 
 # ---------------- TABLA BASE ----------------
 tabla = df[[COL_OS_DB, "fecha_programacion_display", "EstadoTiempo", "DetalleTiempo"]].copy()
@@ -263,6 +280,8 @@ tabla = tabla.rename(
         "fecha_programacion_display": "Fecha Programación de servicio",
     }
 ).reset_index(drop=True)
+
+
 
 # ICONO DE RIESGO
 def icono_estado(est):
@@ -276,8 +295,10 @@ def icono_estado(est):
 
 tabla["Riesgo"] = tabla["EstadoTiempo"].apply(icono_estado)
 
-# Reordenar columnas para que Riesgo vaya primero
+# REORDENAR COLUMNAS PARA QUE RIESGO VAYA PRIMERO
 tabla = tabla[["Riesgo", "O/S", "Fecha Programación de servicio", "EstadoTiempo", "DetalleTiempo"]]
+
+
 
 # ---------------- ROTACIÓN DE VISTAS (VENCIDOS vs URGENTES+POR VENCER) ----------------
 ROTATION_WINDOW = 15  # cantidad de refrescos antes de cambiar (30 ≈ 30 segundos con interval=1000)
@@ -297,6 +318,8 @@ else:
     view_title = "Servicios Urgentes y Por Vencer"
 
 st.subheader(view_title)
+
+
 
 # ---------------- ESTILOS FILAS ----------------
 def style_row(row):
