@@ -301,7 +301,7 @@ tabla = tabla[["Riesgo", "O/S", "Fecha Programación de servicio", "EstadoTiempo
 
 
 # ---------------- ROTACIÓN DE VISTAS (VENCIDOS vs URGENTES+POR VENCER) ----------------
-ROTATION_WINDOW = 15  # cantidad de refrescos antes de cambiar (30 ≈ 30 segundos con interval=1000)
+ROTATION_WINDOW = 15  #Cada 15 segundos
 
 try:
     phase = (refresh_counter // ROTATION_WINDOW) % 2
